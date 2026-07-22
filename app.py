@@ -1,73 +1,103 @@
-import streamlit as st
-from gtts import gTTS
 from io import BytesIO
 import random
+from gtts import gTTS
+import streamlit as st
 
-# Configuración de la página
+# Configuración visual de la aplicación
 st.set_page_config(
-    page_title="Português Rápido - Brasil",
-    page_icon="🇧🇷",
-    layout="wide"
+    page_title="IA Assistente de Português", page_icon="🤖", layout="centered"
 )
 
+
 # -------------------------------------------------------------------
-# FUNCIÓN DE AUDIO RÁPIDA Y ESTABLE
+# MOTOR DE AUDIO ESTABLE Y RÁPIDO
 # -------------------------------------------------------------------
 def generar_audio(texto):
-    # Genera el audio en portugués de Brasil
     tts = gTTS(text=texto, lang="pt", tld="com.br")
     fp = BytesIO()
     tts.write_to_fp(fp)
     fp.seek(0)
     return fp
 
-# -------------------------------------------------------------------
-# BASE DE DATOS DE FRASES
-# -------------------------------------------------------------------
+
+# Base de datos de respuestas/frases del asistente
 FRASES = [
-    {"pt": "Bom dia! Como você está?", "es": "¡Buenos días! ¿Cómo estás?"},
-    {"pt": "Muito prazer em conhecê-lo.", "es": "Mucho gusto en conocerlo."},
-    {"pt": "Por favor, onde fica o banheiro?", "es": "Por favor, ¿dónde queda el baño?"},
-    {"pt": "Quanto custa isto?", "es": "¿Cuánto cuesta esto?"},
-    {"pt": "Uma cerveja bem gelada, por favor.", "es": "Una cerveza bien helada, por favor."},
-    {"pt": "Obrigado por tudo!", "es": "¡Gracias por todo!"},
-    {"pt": "Pode falar mais devagar, por favor?", "es": "¿Puede hablar más despacio, por favor?"}
+    {
+        "pt": "Olá! Tudo bem? Como posso ajudar você hoje?",
+        "es": "¡Hola! ¿Todo bien? ¿Cómo puedo ayudarte hoy?",
+    },
+    {
+        "pt": "Com certeza! Vamos praticar a pronúncia juntos.",
+        "es": "¡Por supuesto! Vamos a practicar la pronunciación juntos.",
+    },
+    {
+        "pt": "Por favor, onde fica o restaurante mais próximo?",
+        "es": "Por favor, ¿dónde queda el restaurante más cercano?",
+    },
+    {
+        "pt": "Muito obrigado pela sua ajuda, meu amigo!",
+        "es": "¡Muchas gracias por tu ayuda, mi amigo!",
+    },
+    {
+        "pt": "Uma cerveja bem gelada e uma água, por favor.",
+        "es": "Una cerveza bien helada y un agua, por favor.",
+    },
 ]
 
 # -------------------------------------------------------------------
-# INTERFAZ PRINCIPAL
+# INTERFAZ TIPO ASISTENTE DE IA
 # -------------------------------------------------------------------
-st.title("🇧🇷 Português Rápido")
-st.subheader("Aprende frases clave con pronunciación clara")
+st.title("🤖 Assistente de Português IA")
+st.caption("Tu tutor interactivo para practicar pronunciación en tiempo real")
 
 st.markdown("---")
 
-if "frase_actual" not in st.session_state:
-    st.session_state.frase_actual = random.choice(FRASES)
+# Historial de conversación en la sesión
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": "¡Hola! Soy tu asistente de Portugués. Escribe cualquier frase abajo para escuchar su pronunciación o toca el botón para darte un ejemplo.",
+        }
+    ]
 
-col1, col2 = st.columns([2, 1])
+# Mostrar historial de chat
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+        if "audio" in msg:
+            st.audio(msg["audio"], format="audio/mp3", autoplay=True)
 
-with col1:
-    st.markdown(f"### 🇧🇷 **{st.session_state.frase_actual['pt']}**")
-    st.markdown(f"🇦🇷 *{st.session_state.frase_actual['es']}*")
+# Botón para pedir sugerencia a la IA
+if st.button("🎲 Pedir frase de ejemplo a la IA"):
+    ejemplo = random.choice(FRASES)
+    texto_pt = ejemplo["pt"]
+    texto_es = ejemplo["es"]
 
-    if st.button("🔊 Escuchar Pronunciación"):
-        with st.spinner("Cargando voz..."):
-            audio_bytes = generar_audio(st.session_state.frase_actual['pt'])
-            st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+    mensaje_ia = f"🇧🇷 **{texto_pt}**\n\n🇦🇷 *(Traducción: {texto_es})*"
+    audio_bytes = generar_audio(texto_pt)
 
-with col2:
-    if st.button("🔄 Siguiente Frase"):
-        st.session_state.frase_actual = random.choice(FRASES)
-        st.rerun()
+    st.session_state.messages.append(
+        {"role": "assistant", "content": mensaje_ia, "audio": audio_bytes}
+    )
+    st.rerun()
 
-st.markdown("---")
+# Entrada de texto estilo Chat (Entrada del usuario)
+if prompt := st.chat_input("Escribe una frase en portugués..."):
+    # Guardar y mostrar mensaje del usuario
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-st.markdown("### ✍️ Escribe tu propia frase en portugués:")
-texto_usuario = st.text_input("Ingresa el texto a escuchar:", "Tudo bem, meu amigo!")
+    # Generar respuesta del asistente con audio
+    with st.spinner("Procesando voz del asistente..."):
+        audio_bytes = generar_audio(prompt)
+        respuesta_ia = f"🔊 Pronunciación de: **{prompt}**"
 
-if st.button("🔊 Pronunciar mi texto"):
-    if texto_usuario.strip():
-        with st.spinner("Cargando voz..."):
-            audio_bytes_user = generar_audio(texto_usuario)
-            st.audio(audio_bytes_user, format="audio/mp3", autoplay=True)
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": respuesta_ia,
+                "audio": audio_bytes,
+            }
+        )
+
+    st.rerun()
