@@ -1,8 +1,6 @@
-import streamlit as st
-import edge_tts
-import asyncio
-import io
+import urllib.parse
 import random
+import streamlit as st
 
 # Configuración de la página
 st.set_page_config(
@@ -12,24 +10,32 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------------
-# FUNCIÓN DE AUDIO CON VOZ MASCULINA Y VELOCIDAD 1.5x
+# FUNCIÓN DE AUDIO RÁPIDO Y DIRECTO
 # -------------------------------------------------------------------
-async def generar_audio_native(texto):
-    # Voz masculina de Brasil súper natural (Antonio) a 1.5x (+50%)
-    communicate = edge_tts.Communicate(texto, voice="pt-BR-AntonioNeural", rate="+50%")
-    out = io.BytesIO()
-    async for chunk in communicate.stream():
-        if chunk["type"] == "data":
-            out.write(chunk["data"])
-    out.seek(0)
-    return out
+def obtener_url_audio(texto):
+    texto_encoded = urllib.parse.quote(texto)
+    # Usa el motor de voz TTS de Google optimizado
+    return f"https://translate.google.com/translate_tts?ie=UTF-8&q={texto_encoded}&tl=pt-BR&client=tw-ob"
 
 def reproducir_audio(texto):
-    audio_bytes = asyncio.run(generar_audio_native(texto))
-    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+    url_audio = obtener_url_audio(texto)
+    # Genera el reproductor HTML con autoplay y acelerador a 1.5x
+    audio_html = f"""
+        <audio autoplay controls style="width: 100%;">
+            <source src="{url_audio}" type="audio/mpeg">
+            Tu navegador no soporta el reproductor de audio.
+        </audio>
+        <script>
+            var audio = document.querySelector('audio');
+            if (audio) {{
+                audio.playbackRate = 1.5;
+            }}
+        </script>
+    """
+    st.components.v1.html(audio_html, height=80)
 
 # -------------------------------------------------------------------
-# BASE DE DATOS DE FRASES / FRASES DE EJEMPLO
+# BASE DE DATOS DE FRASES
 # -------------------------------------------------------------------
 FRASES = [
     {"pt": "Bom dia! Como você está?", "es": "¡Buenos días! ¿Cómo estás?"},
@@ -45,11 +51,10 @@ FRASES = [
 # INTERFAZ PRINCIPAL
 # -------------------------------------------------------------------
 st.title("🇧🇷 Português Rápido")
-st.subheader("Aprende frases clave con pronunciación masculina natural")
+st.subheader("Aprende frases clave con pronunciación rápida y fluida")
 
 st.markdown("---")
 
-# Selector o práctica
 if "frase_actual" not in st.session_state:
     st.session_state.frase_actual = random.choice(FRASES)
 
@@ -60,7 +65,7 @@ with col1:
     st.markdown(f"🇦🇷 *{st.session_state.frase_actual['es']}*")
 
     if st.button("🔊 Escuchar Pronunciación"):
-        reproducir_audio(st.session_state.frase_actual['pt'])
+        reproducir_audio(st.session_state.frase_actual["pt"])
 
 with col2:
     if st.button("🔄 Siguiente Frase"):
@@ -69,7 +74,6 @@ with col2:
 
 st.markdown("---")
 
-# Entrada de texto personalizada
 st.markdown("### ✍️ Escribe tu propia frase en portugués:")
 texto_usuario = st.text_input("Ingresa el texto a escuchar:", "Tudo bem, meu amigo!")
 
