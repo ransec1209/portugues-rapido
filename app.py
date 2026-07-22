@@ -1,6 +1,7 @@
-import urllib.parse
-import random
 import streamlit as st
+from gtts import gTTS
+from io import BytesIO
+import random
 
 # Configuración de la página
 st.set_page_config(
@@ -10,29 +11,15 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------------
-# FUNCIÓN DE AUDIO RÁPIDO Y DIRECTO
+# FUNCIÓN DE AUDIO SIMPLE Y DIRECTA
 # -------------------------------------------------------------------
-def obtener_url_audio(texto):
-    texto_encoded = urllib.parse.quote(texto)
-    # Usa el motor de voz TTS de Google optimizado
-    return f"https://translate.google.com/translate_tts?ie=UTF-8&q={texto_encoded}&tl=pt-BR&client=tw-ob"
-
-def reproducir_audio(texto):
-    url_audio = obtener_url_audio(texto)
-    # Genera el reproductor HTML con autoplay y acelerador a 1.5x
-    audio_html = f"""
-        <audio autoplay controls style="width: 100%;">
-            <source src="{url_audio}" type="audio/mpeg">
-            Tu navegador no soporta el reproductor de audio.
-        </audio>
-        <script>
-            var audio = document.querySelector('audio');
-            if (audio) {{
-                audio.playbackRate = 1.5;
-            }}
-        </script>
-    """
-    st.components.v1.html(audio_html, height=80)
+def generar_audio(texto):
+    # Genera audio en portugués de Brasil
+    tts = gTTS(text=texto, lang="pt", tld="com.br")
+    fp = BytesIO()
+    tts.write_to_fp(fp)
+    fp.seek(0)
+    return fp
 
 # -------------------------------------------------------------------
 # BASE DE DATOS DE FRASES
@@ -51,7 +38,7 @@ FRASES = [
 # INTERFAZ PRINCIPAL
 # -------------------------------------------------------------------
 st.title("🇧🇷 Português Rápido")
-st.subheader("Aprende frases clave con pronunciación rápida y fluida")
+st.subheader("Aprende frases clave con pronunciación en vivo")
 
 st.markdown("---")
 
@@ -64,8 +51,10 @@ with col1:
     st.markdown(f"### 🇧🇷 **{st.session_state.frase_actual['pt']}**")
     st.markdown(f"🇦🇷 *{st.session_state.frase_actual['es']}*")
 
-    if st.button("🔊 Escuchar Pronunciación"):
-        reproducir_audio(st.session_state.frase_actual["pt"])
+    if st.button("🔊 Generar Audio"):
+        with st.spinner("Cargando voz..."):
+            audio_bytes = generar_audio(st.session_state.frase_actual['pt'])
+            st.audio(audio_bytes, format="audio/mp3")
 
 with col2:
     if st.button("🔄 Siguiente Frase"):
@@ -79,4 +68,6 @@ texto_usuario = st.text_input("Ingresa el texto a escuchar:", "Tudo bem, meu ami
 
 if st.button("🔊 Pronunciar mi texto"):
     if texto_usuario.strip():
-        reproducir_audio(texto_usuario)
+        with st.spinner("Cargando voz..."):
+            audio_bytes_user = generar_audio(texto_usuario)
+            st.audio(audio_bytes_user, format="audio/mp3")
