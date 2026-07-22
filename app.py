@@ -1,18 +1,59 @@
 from io import BytesIO
-import random
 from gtts import gTTS
 import streamlit as st
 from streamlit_mic_recorder import speech_to_text
 from thefuzz import fuzz
 
-# Configuración de la página
+# Configuración de página
 st.set_page_config(
-    page_title="Desafío de Pronúncia - IA", page_icon="🎯", layout="centered"
+    page_title="Português Flutuante - Leções",
+    page_icon="🇧🇷",
+    layout="centered",
+)
+
+# Estilos CSS para convertir la interfaz en tarjetas limpias estilo App
+st.markdown(
+    """
+    <style>
+    .main { background-color: #f8f9fa; }
+    .card {
+        background-color: #ffffff;
+        padding: 24px;
+        border-radius: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        border: 1px solid #e9ecef;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .badge-module {
+        background-color: #e7f5ff;
+        color: #1c7ed6;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 14px;
+        display: inline-block;
+        margin-bottom: 12px;
+    }
+    .phrase-pt {
+        font-size: 26px;
+        font-weight: 700;
+        color: #212529;
+        margin-bottom: 8px;
+    }
+    .phrase-es {
+        font-size: 18px;
+        color: #6c757d;
+        font-style: italic;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
 )
 
 
 # -------------------------------------------------------------------
-# FUNCIÓN DE AUDIO SINTETIZADO
+# MOTOR DE AUDIO ESTABLE
 # -------------------------------------------------------------------
 def generar_audio(texto):
     tts = gTTS(text=texto, lang="pt", tld="com.br")
@@ -22,121 +63,180 @@ def generar_audio(texto):
     return fp
 
 
-# Base de datos de frases
-FRASES = [
-    {"pt": "Bom dia! Como você está?", "es": "¡Buenos días! ¿Cómo estás?"},
-    {"pt": "Muito prazer em conhecê-lo.", "es": "Mucho gusto en conocerlo."},
-    {
-        "pt": "Por favor, onde fica o banheiro?",
-        "es": "Por favor, ¿dónde queda el baño?",
-    },
-    {"pt": "Quanto custa isto?", "es": "¿Cuánto cuesta esto?"},
-    {"pt": "Obrigado por tudo!", "es": "¡Gracias por todo!"},
-]
+# -------------------------------------------------------------------
+# BASE DE DATOS DE LECCIONES TEMÁTICAS
+# -------------------------------------------------------------------
+MODULOS = {
+    "🍔 En el Restaurante": [
+        {
+            "pt": "Uma cerveja bem gelada, por favor.",
+            "es": "Una cerveza bien helada, por favor.",
+            "tips": "Ojo con 'gelada', la G suena suave como 'yelada'.",
+        },
+        {
+            "pt": "A conta, por favor.",
+            "es": "La cuenta, por favor.",
+            "tips": "Pronuncia la 'O' final de 'conta' casi como una 'U'.",
+        },
+        {
+            "pt": "Onde fica o banheiro?",
+            "es": "¿Dónde queda el baño?",
+            "tips": "'Banheiro' suena como 'bañeiro'.",
+        },
+    ],
+    "🧳 Viajes y Servicios": [
+        {
+            "pt": "Bom dia! Como você está?",
+            "es": "¡Buenos días! ¿Cómo estás?",
+            "tips": "'Bom' se pronuncia nasalizado, sin cerrar fuerte los labios.",
+        },
+        {
+            "pt": "Muito prazer em conhecê-lo.",
+            "es": "Mucho gusto en conocerlo.",
+            "tips": "La 'R' inicial de 'prazer' es suave.",
+        },
+        {
+            "pt": "Pode falar mais devagar, por favor?",
+            "es": "¿Puede hablar más despacio, por favor?",
+            "tips": "'Devagar' acentúa fuerte la última sílaba.",
+        },
+    ],
+}
 
 # -------------------------------------------------------------------
 # ESTADO DE LA SESIÓN
 # -------------------------------------------------------------------
-if "indice" not in st.session_state:
-    st.session_state.indice = 0
-if "precision" not in st.session_state:
-    st.session_state.precision = 0
+if "modulo_actual" not in st.session_state:
+    st.session_state.modulo_actual = "🍔 En el Restaurante"
+if "indice_frase" not in st.session_state:
+    st.session_state.indice_frase = 0
+if "puntos" not in st.session_state:
+    st.session_state.puntos = 0
 if "desbloqueado" not in st.session_state:
     st.session_state.desbloqueado = False
 
-frase_actual = FRASES[st.session_state.indice]
+frases_modulo = MODULOS[st.session_state.modulo_actual]
+frase_actual = frases_modulo[st.session_state.indice_frase]
 
 # -------------------------------------------------------------------
-# INTERFAZ PRINCIPAL
+# CABECERA Y GAMIFICACIÓN
 # -------------------------------------------------------------------
-st.title("🎯 Desafío de Pronunciación (Examen 90%)")
-st.caption(
-    "Escucha la frase, presiona el micrófono para pronunciarla. La app calculará tu precisión y solo te dejará avanzar si alcanzas el 90%."
+col_title, col_score = st.columns([3, 1])
+
+with col_title:
+    st.title("🇧🇷 Português Rápido")
+
+with col_score:
+    st.metric(label="⭐ Experiencia", value=f"{st.session_state.puntos} XP")
+
+# Selector de Lección
+modulo_seleccionado = st.selectbox(
+    "Selecciona un Módulo de Práctica:",
+    list(MODULOS.keys()),
+    index=list(MODULOS.keys()).index(st.session_state.modulo_actual),
+)
+
+if modulo_seleccionado != st.session_state.modulo_actual:
+    st.session_state.modulo_actual = modulo_seleccionado
+    st.session_state.indice_frase = 0
+    st.session_state.desbloqueado = False
+    st.rerun()
+
+# Barra de Progreso del Módulo
+progreso_modulo = (st.session_state.indice_frase + 1) / len(frases_modulo)
+st.progress(
+    progreso_modulo,
+    text=f"Lección: Frase {st.session_state.indice_frase + 1} de {len(frases_modulo)}",
 )
 
 st.markdown("---")
 
-st.subheader(f"Frase #{st.session_state.indice + 1} de {len(FRASES)}")
-st.markdown(f"### 🇧🇷 **{frase_actual['pt']}**")
-st.markdown(f"🇦🇷 *{frase_actual['es']}*")
+# -------------------------------------------------------------------
+# TARJETA INTERACTIVA DE APRENDIZAJE (FLASHCARD)
+# -------------------------------------------------------------------
+st.markdown(
+    f"""
+    <div class="card">
+        <div class="badge-module">{st.session_state.modulo_actual}</div>
+        <div class="phrase-pt">"{frase_actual['pt']}"</div>
+        <div class="phrase-es">{frase_actual['es']}</div>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
 
-# Escuchar modelo
-if st.button("🔊 Escuchar pronunciación correcta"):
-    audio_bytes = generar_audio(frase_actual["pt"])
-    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+# Botón para escuchar el modelo
+if st.button("🔊 Escuchar Pronunciación Nativa", use_container_width=True):
+    audio_file = generar_audio(frase_actual["pt"])
+    st.audio(audio_file, format="audio/mp3", autoplay=True)
+
+# Tip del Tutor de IA
+with st.expander("💡 Consejo de pronunciación del tutor"):
+    st.write(frase_actual["tips"])
 
 st.markdown("---")
 
 # -------------------------------------------------------------------
-# RECONOCIMIENTO Y EVALUACIÓN DE VOZ
+# PRÁCTICA Y DESAFÍO DE VOZ (DESBLOQUEO AL 90%)
 # -------------------------------------------------------------------
-st.markdown("### 🎤 Tu turno de hablar:")
+st.subheader("🎤 Graba tu voz para evaluar:")
 
-# Componente de grabación con reconocimiento de voz en portugués
 texto_escuchado = speech_to_text(
     language="pt-BR",
-    start_prompt="🔴 Presiona para Grabar",
-    stop_prompt="⏹️ Detener y Evaluar",
-    key="reconocedor_voz",
+    start_prompt="🎙️ Toca para hablar",
+    stop_prompt="⏹️ Evaluar mi pronunciación",
+    key="grabador_voz",
 )
 
 if texto_escuchado:
-    st.write(f"**Lo que la IA escuchó:** *\"{texto_escuchado}\"*")
+    st.write(f"**Escuchado:** *\"{texto_escuchado}\"*")
 
-    # Comparación de precisión usando Fuzzy Logic
+    # Evaluación de precisión por Fuzzy Matching
     score = fuzz.ratio(
         frase_actual["pt"].lower().strip(), texto_escuchado.lower().strip()
     )
-    st.session_state.precision = score
 
-    # Evaluación según el 90%
     if score >= 90:
         st.success(
-            f"🎉 ¡Excelente pronunciación! Precisión obtenida: **{score}%**"
+            f"🎉 ¡Excelente pronunciación! Precision: **{score}%**. ¡Frase superada!"
         )
-        st.session_state.desbloqueado = True
+        if not st.session_state.desbloqueado:
+            st.session_state.puntos += 50
+            st.session_state.desbloqueado = True
     else:
         st.error(
-            f"❌ Precisión obtenida: **{score}%**. Necesitas al menos 90% para avanzar. ¡Inténtalo de nuevo!"
+            f"🤏 Obtuviste **{score}%**. Necesitas un 90% para avanzar. ¡Ajusta el tono y prueba de nuevo!"
         )
         st.session_state.desbloqueado = False
-
-# Metric de progreso
-st.progress(
-    st.session_state.precision / 100,
-    text=f"Precisión actual: {st.session_state.precision}% / Meta: 90%",
-)
 
 st.markdown("---")
 
 # -------------------------------------------------------------------
-# BOTÓN DE AVANCE CONDICIONAL
+# NAVEGACIÓN Y AVANCE BLOQUEADO
 # -------------------------------------------------------------------
-col1, col2 = st.columns([1, 1])
+col_prev, col_next = st.columns(2)
 
-with col1:
-    if st.button("🔄 Reiniciar nivel"):
-        st.session_state.precision = 0
-        st.session_state.desbloqueado = False
-        st.rerun()
+with col_prev:
+    if st.button("⬅️ Anterior Frase", use_container_width=True):
+        if st.session_state.indice_frase > 0:
+            st.session_state.indice_frase -= 1
+            st.session_state.desbloqueado = False
+            st.rerun()
 
-with col2:
-    # Solo habilita el botón si superó el 90%
+with col_next:
     if st.session_state.desbloqueado:
-        if st.button("➡️ Siguiente Frase (Desbloqueado)"):
-            if st.session_state.indice < len(FRASES) - 1:
-                st.session_state.indice += 1
-                st.session_state.precision = 0
+        if st.button("➡️ Siguiente Frase", use_container_width=True):
+            if st.session_state.indice_frase < len(frases_modulo) - 1:
+                st.session_state.indice_frase += 1
                 st.session_state.desbloqueado = False
                 st.rerun()
             else:
                 st.balloons()
-                st.success(
-                    "🏆 ¡Felicitaciones! Has completado todo el módulo con pronunciación perfecta."
-                )
+                st.success("🏆 ¡Módulo completado! Selecciona otra lección.")
     else:
         st.button(
             "🔒 Siguiente Frase (Bloqueado)",
             disabled=True,
-            help="Alcanza el 90% de precisión para desbloquear esta opción.",
+            use_container_width=True,
+            help="Supera el 90% de precisión en tu grabación para avanzar.",
         )
