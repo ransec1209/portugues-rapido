@@ -2,15 +2,17 @@ from io import BytesIO
 import random
 from gtts import gTTS
 import streamlit as st
+from streamlit_mic_recorder import speech_to_text
+from thefuzz import fuzz
 
-# Configuración visual de la aplicación
+# Configuración de la página
 st.set_page_config(
-    page_title="IA Assistente de Português", page_icon="🤖", layout="centered"
+    page_title="Desafío de Pronúncia - IA", page_icon="🎯", layout="centered"
 )
 
 
 # -------------------------------------------------------------------
-# MOTOR DE AUDIO ESTABLE Y RÁPIDO
+# FUNCIÓN DE AUDIO SINTETIZADO
 # -------------------------------------------------------------------
 def generar_audio(texto):
     tts = gTTS(text=texto, lang="pt", tld="com.br")
@@ -20,84 +22,121 @@ def generar_audio(texto):
     return fp
 
 
-# Base de datos de respuestas/frases del asistente
+# Base de datos de frases
 FRASES = [
+    {"pt": "Bom dia! Como você está?", "es": "¡Buenos días! ¿Cómo estás?"},
+    {"pt": "Muito prazer em conhecê-lo.", "es": "Mucho gusto en conocerlo."},
     {
-        "pt": "Olá! Tudo bem? Como posso ajudar você hoje?",
-        "es": "¡Hola! ¿Todo bien? ¿Cómo puedo ayudarte hoy?",
+        "pt": "Por favor, onde fica o banheiro?",
+        "es": "Por favor, ¿dónde queda el baño?",
     },
-    {
-        "pt": "Com certeza! Vamos praticar a pronúncia juntos.",
-        "es": "¡Por supuesto! Vamos a practicar la pronunciación juntos.",
-    },
-    {
-        "pt": "Por favor, onde fica o restaurante mais próximo?",
-        "es": "Por favor, ¿dónde queda el restaurante más cercano?",
-    },
-    {
-        "pt": "Muito obrigado pela sua ajuda, meu amigo!",
-        "es": "¡Muchas gracias por tu ayuda, mi amigo!",
-    },
-    {
-        "pt": "Uma cerveja bem gelada e uma água, por favor.",
-        "es": "Una cerveza bien helada y un agua, por favor.",
-    },
+    {"pt": "Quanto custa isto?", "es": "¿Cuánto cuesta esto?"},
+    {"pt": "Obrigado por tudo!", "es": "¡Gracias por todo!"},
 ]
 
 # -------------------------------------------------------------------
-# INTERFAZ TIPO ASISTENTE DE IA
+# ESTADO DE LA SESIÓN
 # -------------------------------------------------------------------
-st.title("🤖 Assistente de Português IA")
-st.caption("Tu tutor interactivo para practicar pronunciación en tiempo real")
+if "indice" not in st.session_state:
+    st.session_state.indice = 0
+if "precision" not in st.session_state:
+    st.session_state.precision = 0
+if "desbloqueado" not in st.session_state:
+    st.session_state.desbloqueado = False
+
+frase_actual = FRASES[st.session_state.indice]
+
+# -------------------------------------------------------------------
+# INTERFAZ PRINCIPAL
+# -------------------------------------------------------------------
+st.title("🎯 Desafío de Pronunciación (Examen 90%)")
+st.caption(
+    "Escucha la frase, presiona el micrófono para pronunciarla. La app calculará tu precisión y solo te dejará avanzar si alcanzas el 90%."
+)
 
 st.markdown("---")
 
-# Historial de conversación en la sesión
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": "¡Hola! Soy tu asistente de Portugués. Escribe cualquier frase abajo para escuchar su pronunciación o toca el botón para darte un ejemplo.",
-        }
-    ]
+st.subheader(f"Frase #{st.session_state.indice + 1} de {len(FRASES)}")
+st.markdown(f"### 🇧🇷 **{frase_actual['pt']}**")
+st.markdown(f"🇦🇷 *{frase_actual['es']}*")
 
-# Mostrar historial de chat
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-        if "audio" in msg:
-            st.audio(msg["audio"], format="audio/mp3", autoplay=True)
+# Escuchar modelo
+if st.button("🔊 Escuchar pronunciación correcta"):
+    audio_bytes = generar_audio(frase_actual["pt"])
+    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
 
-# Botón para pedir sugerencia a la IA
-if st.button("🎲 Pedir frase de ejemplo a la IA"):
-    ejemplo = random.choice(FRASES)
-    texto_pt = ejemplo["pt"]
-    texto_es = ejemplo["es"]
+st.markdown("---")
 
-    mensaje_ia = f"🇧🇷 **{texto_pt}**\n\n🇦🇷 *(Traducción: {texto_es})*"
-    audio_bytes = generar_audio(texto_pt)
+# -------------------------------------------------------------------
+# RECONOCIMIENTO Y EVALUACIÓN DE VOZ
+# -------------------------------------------------------------------
+st.markdown("### 🎤 Tu turno de hablar:")
 
-    st.session_state.messages.append(
-        {"role": "assistant", "content": mensaje_ia, "audio": audio_bytes}
+# Componente de grabación con reconocimiento de voz en portugués
+texto_escuchado = speech_to_text(
+    language="pt-BR",
+    start_prompt="🔴 Presiona para Grabar",
+    stop_prompt="⏹️ Detener y Evaluar",
+    key="reconocedor_voz",
+)
+
+if texto_escuchado:
+    st.write(f"**Lo que la IA escuchó:** *\"{texto_escuchado}\"*")
+
+    # Comparación de precisión usando Fuzzy Logic
+    score = fuzz.ratio(
+        frase_actual["pt"].lower().strip(), texto_escuchado.lower().strip()
     )
-    st.rerun()
+    st.session_state.precision = score
 
-# Entrada de texto estilo Chat (Entrada del usuario)
-if prompt := st.chat_input("Escribe una frase en portugués..."):
-    # Guardar y mostrar mensaje del usuario
-    st.session_state.messages.append({"role": "user", "content": prompt})
-
-    # Generar respuesta del asistente con audio
-    with st.spinner("Procesando voz del asistente..."):
-        audio_bytes = generar_audio(prompt)
-        respuesta_ia = f"🔊 Pronunciación de: **{prompt}**"
-
-        st.session_state.messages.append(
-            {
-                "role": "assistant",
-                "content": respuesta_ia,
-                "audio": audio_bytes,
-            }
+    # Evaluación según el 90%
+    if score >= 90:
+        st.success(
+            f"🎉 ¡Excelente pronunciación! Precisión obtenida: **{score}%**"
         )
+        st.session_state.desbloqueado = True
+    else:
+        st.error(
+            f"❌ Precisión obtenida: **{score}%**. Necesitas al menos 90% para avanzar. ¡Inténtalo de nuevo!"
+        )
+        st.session_state.desbloqueado = False
 
-    st.rerun()
+# Metric de progreso
+st.progress(
+    st.session_state.precision / 100,
+    text=f"Precisión actual: {st.session_state.precision}% / Meta: 90%",
+)
+
+st.markdown("---")
+
+# -------------------------------------------------------------------
+# BOTÓN DE AVANCE CONDICIONAL
+# -------------------------------------------------------------------
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    if st.button("🔄 Reiniciar nivel"):
+        st.session_state.precision = 0
+        st.session_state.desbloqueado = False
+        st.rerun()
+
+with col2:
+    # Solo habilita el botón si superó el 90%
+    if st.session_state.desbloqueado:
+        if st.button("➡️ Siguiente Frase (Desbloqueado)"):
+            if st.session_state.indice < len(FRASES) - 1:
+                st.session_state.indice += 1
+                st.session_state.precision = 0
+                st.session_state.desbloqueado = False
+                st.rerun()
+            else:
+                st.balloons()
+                st.success(
+                    "🏆 ¡Felicitaciones! Has completado todo el módulo con pronunciación perfecta."
+                )
+    else:
+        st.button(
+            "🔒 Siguiente Frase (Bloqueado)",
+            disabled=True,
+            help="Alcanza el 90% de precisión para desbloquear esta opción.",
+        )
